@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { SignOutButton } from "./SignOutButton";
 import { useTranslation } from "@/lib/useTranslation";
 import { 
   FileText, 
@@ -12,7 +13,6 @@ import {
   Settings, 
   PlusCircle, 
   Sparkles, 
-  LogOut,
   Building2,
   Menu,
   X,
@@ -156,9 +156,7 @@ export function Sidebar({ currentPath = "/dashboard" }: SidebarProps) {
               </div>
               <span className="text-xs font-medium text-slate-300">{/* TODO: session.user.email */}user@example.com</span>
             </div>
-            <Link href="/login" className="text-slate-400 hover:text-red-400 transition-colors p-1" title="Sign out">
-              <LogOut size={16} />
-            </Link>
+            <SignOutButton />
           </div>
         </div>
       </aside>

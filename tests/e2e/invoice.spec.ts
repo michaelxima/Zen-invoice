@@ -35,7 +35,9 @@ test("creates a tenant-owned invoice, renders its token portal, and keeps Stripe
   await expect(page.getByText("Stark Industries").first()).toBeVisible();
   await expect(page.getByText("Draft").first()).toBeVisible();
   await page.getByRole("button", { name: /Send invoice INV-/i }).click();
-  await expect(page.getByRole("alert")).toContainText(/email|provider/i);
+  // Next.js also renders a role="alert" route announcer, so pick the app's own message.
+  // No email provider is configured in tests, so sending must fail visibly and the invoice stays a draft.
+  await expect(page.getByRole("alert").filter({ hasText: /email|provider/i })).toBeVisible();
   const portalHref = await page.locator("a[href^='/portal/']").first().getAttribute("href");
   expect(portalHref).toMatch(/^\/portal\/[0-9a-f-]+$/i);
 

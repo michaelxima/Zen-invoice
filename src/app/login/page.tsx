@@ -1,4 +1,5 @@
 import LoginForm from "./login-form";
+import { SIGN_IN_ERROR_MESSAGES, isGoogleSignInEnabled } from "@/lib/auth/session-rules";
 
 const DEFAULT_CALLBACK_URL = "/dashboard";
 
@@ -15,9 +16,15 @@ function safeCallbackUrl(value: string | string[] | undefined) {
   }
 }
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string | string[] }> }) {
-  const { callbackUrl } = await searchParams;
-  const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim());
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string | string[]; error?: string | string[] }>;
+}) {
+  const { callbackUrl, error } = await searchParams;
+  const googleConfigured = isGoogleSignInEnabled(process.env);
+  const errorCode = Array.isArray(error) ? error[0] : error;
+  const initialError = errorCode ? (SIGN_IN_ERROR_MESSAGES[errorCode] ?? null) : null;
 
-  return <LoginForm callbackUrl={safeCallbackUrl(callbackUrl)} googleConfigured={googleConfigured} />;
+  return <LoginForm callbackUrl={safeCallbackUrl(callbackUrl)} googleConfigured={googleConfigured} initialError={initialError} />;
 }

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, numeric, varchar, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, numeric, varchar, uuid, uniqueIndex, index, primaryKey } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -122,3 +122,34 @@ export const auditLogs = pgTable("audit_logs", {
   metadata: text("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// One row per sign-in. The session cookie carries this row's id; a request is only authenticated while the
+// row exists, is not revoked and has not expired. Signing out revokes the row, so a copied cookie stops working.
+export const authSessions = pgTable(
+  "auth_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedReason: varchar("revoked_reason", { length: 32 }),
+  },
+  (table) => [index("auth_sessions_user_id_idx").on(table.userId)],
+);
+
+// A sign-in provider identity (for example a Google account's stable subject) bound to one user. Users are never
+// matched to a provider identity by email alone.
+export const authAccounts = pgTable(
+  "auth_accounts",
+  {
+    provider: varchar("provider", { length: 32 }).notNull(),
+    providerAccountId: text("provider_account_id").notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.provider, table.providerAccountId] }),
+    uniqueIndex("auth_accounts_user_provider_uq").on(table.userId, table.provider),
+  ],
+);

@@ -3,137 +3,162 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { FormEvent, useState } from "react";
+import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 import { registerUser } from "@/lib/actions/auth";
-
-type AccountDetails = {
-  firstName: string;
-  lastName: string;
-  company: string;
-  address: string;
-  city: string;
-  postalCode: string;
-  state: string;
-  country: string;
-};
+import {
+  type OnboardingErrors,
+  type OnboardingField,
+  type OnboardingFormStep,
+  type OnboardingValues,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  STEP_FIELDS,
+  TAX_ID_MAX_LENGTH,
+  buildBusinessAddress,
+  emptyOnboardingValues,
+  findFirstInvalidStep,
+  formFieldForServerField,
+  hasErrors,
+  isSupportedCurrency,
+  validateOnboardingStep,
+} from "@/lib/validations/onboarding";
 
 const steps = ["Welcome", "Sign up", "Account", "Business"];
 
-const emptyAccount: AccountDetails = {
-  firstName: "",
-  lastName: "",
-  company: "",
-  address: "",
-  city: "",
-  postalCode: "",
-  state: "",
-  country: "",
-};
+const currencies: Array<[string, string]> = [
+  ["USD", "USD — US Dollar"],
+  ["EUR", "EUR — Euro"],
+  ["GBP", "GBP — British Pound"],
+  ["CAD", "CAD — Canadian Dollar"],
+  ["AUD", "AUD — Australian Dollar"],
+  ["JPY", "JPY — Japanese Yen"],
+  ["NOK", "NOK — Norwegian Krone"],
+  ["SEK", "SEK — Swedish Krona"],
+  ["DKK", "DKK — Danish Krone"],
+];
+
+const inputClass =
+  "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-950 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[var(--brand-600)] focus:ring-2 focus:ring-[var(--brand-500)]/30";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmation, setConfirmation] = useState("");
-  const [account, setAccount] = useState<AccountDetails>(emptyAccount);
-  const [businessName, setBusinessName] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  // Every field is controlled and lives here, so values survive re-renders, Back/Next and any way of submitting.
+  const [values, setValues] = useState<OnboardingValues>(emptyOnboardingValues);
+  const [errors, setErrors] = useState<OnboardingErrors>({});
+  const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  function updateAccount(field: keyof AccountDetails, value: string) {
-    setAccount((current) => ({ ...current, [field]: value }));
+
+  // Focus is moved after React has rendered the new step or the error messages.
+  const pendingFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingFocus.current) return;
+    document.getElementById(pendingFocus.current)?.focus();
+    pendingFocus.current = null;
+  });
+
+  function setField(field: OnboardingField, value: string) {
+    setValues((current) => ({ ...current, [field]: value }));
   }
 
-  function validateCurrentStep() {
-    const nextErrors: Record<string, string> = {};
+  function bind(field: OnboardingField) {
+    return {
+      id: field,
+      value: values[field],
+      error: errors[field],
+      onChange: (event: ChangeEvent<HTMLInputElement>) => setField(field, event.target.value),
+    };
+  }
 
-    if (step === 1) {
-      if (!email.includes("@")) nextErrors.email = "Enter a valid email address.";
-      if (password.length < 12 || password.length > 72) nextErrors.password = "Password must be between 12 and 72 characters.";
-      if (confirmation !== password) nextErrors.confirmation = "Passwords must match.";
-    }
+  function goToStep(next: OnboardingFormStep) {
+    setErrors({});
+    setFormError("");
+    setStep(next);
+    pendingFocus.current = STEP_FIELDS[next][0];
+  }
 
-    if (step === 2) {
-      const required: Array<[keyof AccountDetails, string]> = [
-        ["firstName", "First name"],
-        ["lastName", "Last name"],
-        ["address", "Address"],
-        ["city", "City"],
-        ["postalCode", "Postal code"],
-        ["country", "Country"],
-      ];
-
-      required.forEach(([field, label]) => {
-        if (!account[field].trim()) nextErrors[field] = `${label} is required.`;
-      });
-    }
-
-    if (step === 3) {
-      if (!businessName.trim()) nextErrors.businessName = "Business name is required.";
-    }
-
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+  function showErrors(next: OnboardingErrors, onStep: OnboardingFormStep) {
+    setErrors(next);
+    setStep(onStep);
+    pendingFocus.current = STEP_FIELDS[onStep].find((field) => next[field]) ?? null;
   }
 
   function continueOnboarding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (validateCurrentStep()) {
-      if (step === 2 && account.company.trim() && !businessName.trim()) setBusinessName(account.company.trim());
-      setStep((current) => Math.min(current + 1, steps.length - 1));
+    const current = step as OnboardingFormStep;
+    const next = validateOnboardingStep(current, values);
+    if (hasErrors(next)) {
+      showErrors(next, current);
+      return;
     }
+    if (current === 2 && values.company.trim() && !values.businessName.trim()) {
+      setField("businessName", values.company.trim());
+    }
+    goToStep((current + 1) as OnboardingFormStep);
   }
 
   async function finishOnboarding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!email || !password) {
-      setErrors({ businessName: "Email and password are required." });
-      setSubmitting(false);
+    if (submitting) return;
+
+    const invalid = findFirstInvalidStep(values);
+    if (invalid) {
+      showErrors(invalid.errors, invalid.step);
       return;
     }
-    if (password !== confirmation) {
-      setErrors({ businessName: "Passwords do not match." });
-      setSubmitting(false);
+    // Already checked by the step validation above; repeated here so the type is narrowed for the server call.
+    const currency = values.currency;
+    if (!isSupportedCurrency(currency)) {
+      showErrors({ currency: "Choose a supported currency." }, 3);
       return;
     }
-    if (!businessName.trim()) {
-      setErrors({ businessName: "Business name is required." });
-      setSubmitting(false);
-      return;
-    }
+
     setErrors({});
+    setFormError("");
     setSubmitting(true);
-
     try {
-      const businessAddress = [account.address, account.city, account.state, account.postalCode, account.country].map((value) => value.trim()).filter(Boolean).join(", ");
-      await registerUser({
-        email,
-        password,
-        firstName: account.firstName,
-        lastName: account.lastName,
-        businessName,
-        businessAddress,
+      const result = await registerUser({
+        email: values.email,
+        password: values.password,
+        firstName: values.firstName,
+        lastName: values.lastName,
+        businessName: values.businessName,
+        businessAddress: buildBusinessAddress(values),
         currency,
+        taxId: values.taxId,
       });
 
-      const login = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-      if (!login?.ok) throw new Error("Account created, but sign-in failed. Please sign in from the login page.");
+      if (!result.ok) {
+        const mapped: OnboardingErrors = {};
+        let firstStep: OnboardingFormStep | null = null;
+        for (const [key, message] of Object.entries(result.fieldErrors ?? {})) {
+          const target = formFieldForServerField(key);
+          if (!target) continue;
+          mapped[target.field] ??= message;
+          if (firstStep === null || target.step < firstStep) firstStep = target.step;
+        }
+        if (firstStep !== null && firstStep !== 3) {
+          showErrors(mapped, firstStep);
+        } else {
+          setErrors(mapped);
+          setFormError(result.error);
+        }
+        return;
+      }
+
+      const login = await signIn("credentials", { email: values.email, password: values.password, redirect: false });
+      if (!login?.ok) {
+        setFormError("Your account was created, but signing in failed. Please sign in from the login page.");
+        return;
+      }
       router.push("/dashboard");
-    } catch (err: any) {
-      setErrors({ businessName: err.message || "Registration failed" });
+    } catch {
+      setFormError("Registration failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
   }
-
-  const inputClass =
-    "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-950 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[var(--brand-600)] focus:ring-2 focus:ring-[var(--brand-500)]/30";
 
   return (
     <main className="min-h-screen px-4 py-10 sm:py-16" style={{ background: "var(--bg-950)" }}>
@@ -184,47 +209,43 @@ export default function OnboardingPage() {
                 <li>👉 Create your first invoice, it only takes a minute!</li>
               </ul>
               <p className="text-sm text-slate-500">Your business profile is saved securely and can be updated later.</p>
-              <button onClick={()=>setStep(1)} className="rounded-lg px-6 py-3 bg-indigo-600 text-white font-bold">Get Started</button>
+              <button type="button" onClick={() => goToStep(1)} className="rounded-lg px-6 py-3 bg-indigo-600 text-white font-bold">Get Started</button>
             </div>
           )}
+
           {step === 1 && (
             <form noValidate onSubmit={continueOnboarding} className="mx-auto max-w-md space-y-5">
-              <div className="text-center">
-                <p className="text-sm font-bold uppercase tracking-widest" style={{ color: "var(--brand-600)" }}>Step 1 of 3</p>
-                <h2 className="mt-2 text-3xl font-light text-slate-800">Create your account</h2>
-              </div>
-              <Field label="Email address" error={errors.email} required>
-                <input id="email" type="email" autoComplete="email" defaultValue={email} onBlur={(event) => setEmail(event.currentTarget.value)} className={inputClass} aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? "email-error" : undefined} tabIndex={0} />
-              </Field>
-              <Field label="Password" error={errors.password} required>
-                <input id="password" type="password" autoComplete="new-password" minLength={12} maxLength={72} defaultValue={password} onBlur={(event) => setPassword(event.currentTarget.value)} className={inputClass} aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? "password-error" : "password-hint"} tabIndex={0} />
-              </Field>
-              <p id="password-hint" className="-mt-3 text-xs text-slate-500">Use 12–72 characters. A longer passphrase is recommended.</p>
-              <Field label="Confirm password" error={errors.confirmation} required>
-                <input id="confirmation" type="password" autoComplete="new-password" defaultValue={confirmation} onBlur={(event) => setConfirmation(event.currentTarget.value)} className={inputClass} aria-invalid={Boolean(errors.confirmation)} aria-describedby={errors.confirmation ? "confirmation-error" : undefined} tabIndex={0} />
-              </Field>
+              <StepHeading number={1} title="Create your account" />
+              <TextField label="Email address" type="email" autoComplete="email" required {...bind("email")} />
+              <TextField
+                label="Password"
+                type="password"
+                autoComplete="new-password"
+                required
+                maxLength={PASSWORD_MAX_LENGTH}
+                hint={`Use ${PASSWORD_MIN_LENGTH}–${PASSWORD_MAX_LENGTH} characters. A longer passphrase is recommended.`}
+                {...bind("password")}
+              />
+              <TextField label="Confirm password" type="password" autoComplete="new-password" required {...bind("confirmation")} />
               <SubmitButton>Continue to account details</SubmitButton>
             </form>
           )}
 
           {step === 2 && (
             <form noValidate onSubmit={continueOnboarding} className="space-y-5">
-              <div className="text-center">
-                <p className="text-sm font-bold uppercase tracking-widest" style={{ color: "var(--brand-600)" }}>Step 2 of 3</p>
-                <h2 className="mt-2 text-3xl font-light text-slate-800">Tell us about you</h2>
-              </div>
+              <StepHeading number={2} title="Tell us about you" />
               <div className="grid gap-5 sm:grid-cols-2">
-                <AccountField label="First name" field="firstName" required />
-                <AccountField label="Last name" field="lastName" required />
-                <AccountField label="Company name" field="company" />
-                <div className="sm:col-span-2"><AccountField label="Address" field="address" required /></div>
-                <AccountField label="City" field="city" required />
-                <AccountField label="Postal code" field="postalCode" required />
-                <AccountField label="State / region" field="state" />
-                <AccountField label="Country" field="country" required />
+                <TextField label="First name" autoComplete="given-name" required {...bind("firstName")} />
+                <TextField label="Last name" autoComplete="family-name" required {...bind("lastName")} />
+                <TextField label="Company name" autoComplete="organization" {...bind("company")} />
+                <TextField label="Address" autoComplete="address-line1" required className="sm:col-span-2" {...bind("address")} />
+                <TextField label="City" autoComplete="address-level2" required {...bind("city")} />
+                <TextField label="Postal code" autoComplete="postal-code" required {...bind("postalCode")} />
+                <TextField label="State / region" autoComplete="address-level1" {...bind("state")} />
+                <TextField label="Country" autoComplete="country-name" required {...bind("country")} />
               </div>
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-                <button type="button" onClick={() => { setErrors({}); setStep(1); }} className="rounded-lg px-5 py-3 text-sm font-bold text-slate-600 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-[var(--brand-500)]">Back</button>
+                <BackButton onClick={() => goToStep(1)} />
                 <SubmitButton>Continue to business</SubmitButton>
               </div>
             </form>
@@ -232,24 +253,31 @@ export default function OnboardingPage() {
 
           {step === 3 && (
             <form noValidate onSubmit={finishOnboarding} className="mx-auto max-w-md space-y-5">
-              <div className="text-center">
-                <p className="text-sm font-bold uppercase tracking-widest" style={{ color: "var(--brand-600)" }}>Step 3 of 3</p>
-                <h2 className="mt-2 text-3xl font-light text-slate-800">Set up your business</h2>
-                <p className="mt-2 text-sm text-slate-600">You can change these preferences later.</p>
-              </div>
-              <Field label="Business name" error={errors.businessName} required>
-                <input id="businessName" defaultValue={businessName} onBlur={(event) => setBusinessName(event.currentTarget.value)} className={inputClass} aria-invalid={Boolean(errors.businessName)} aria-describedby={errors.businessName ? "businessName-error" : undefined} tabIndex={0} pattern=".*" inputMode="text" spellCheck={true} />
-              </Field>
-              <Field label="Default currency">
-                <select id="currency" value={currency} onChange={(event) => setCurrency(event.target.value)} className={inputClass}>
-                  {[["USD", "USD — US Dollar"], ["EUR", "EUR — Euro"], ["GBP", "GBP — British Pound"], ["CAD", "CAD — Canadian Dollar"], ["AUD", "AUD — Australian Dollar"], ["JPY", "JPY — Japanese Yen"], ["NOK", "NOK — Norwegian Krone"], ["SEK", "SEK — Swedish Krona"], ["DKK", "DKK — Danish Krone"]].map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+              <StepHeading number={3} title="Set up your business" subtitle="You can change these preferences later." />
+              {formError && (
+                <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+                  {formError}
+                </p>
+              )}
+              <TextField label="Business name" autoComplete="organization" required maxLength={120} {...bind("businessName")} />
+              <div>
+                <label htmlFor="currency" className="block text-sm font-semibold text-slate-700">Default currency</label>
+                <select
+                  id="currency"
+                  name="currency"
+                  value={values.currency}
+                  onChange={(event) => setField("currency", event.target.value)}
+                  aria-invalid={errors.currency ? true : undefined}
+                  aria-describedby={errors.currency ? "currency-error" : undefined}
+                  className={inputClass}
+                >
+                  {currencies.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
                 </select>
-              </Field>
-              <Field label="Tax ID / VAT number (optional)">
-                <input id="taxId" className={inputClass} />
-              </Field>
+                {errors.currency && <p id="currency-error" className="mt-1 text-sm text-red-600" role="alert">{errors.currency}</p>}
+              </div>
+              <TextField label="Tax ID / VAT number (optional)" maxLength={TAX_ID_MAX_LENGTH} {...bind("taxId")} />
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-                <button type="button" onClick={() => setStep(2)} className="rounded-lg px-5 py-3 text-sm font-bold text-slate-600 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-[var(--brand-500)]">Back</button>
+                <BackButton onClick={() => goToStep(2)} />
                 <button
                   type="submit"
                   disabled={submitting}
@@ -269,38 +297,74 @@ export default function OnboardingPage() {
       </div>
     </main>
   );
-
-  function AccountField({ label, field, required, type = "text" }: { label: string; field: keyof AccountDetails; required?: boolean; type?: string }) {
-    const error = errors[field];
-    const [value, setValue] = useState(account[field]);
-    return (
-      <div>
-        <label htmlFor={field} className="block text-sm font-semibold text-slate-700">
-          {label}
-          {required && <span className="text-red-500 font-bold"> *</span>}
-        </label>
-        <input id={field} name={field} type={type} autoComplete="off" inputMode="text" spellCheck={true} pattern=".*" value={value} onChange={(e) => setValue(e.target.value)} onBlur={(e) => updateAccount(field, e.target.value)} className={inputClass} aria-invalid={Boolean(error)} aria-describedby={error ? `${field}-error` : undefined} tabIndex={0} />
-        {error && <p id={`${field}-error`} className="mt-1 text-sm text-red-600" role="alert">{error}</p>}
-      </div>
-    );
-  }
 }
 
-function Field({ label, error, required, children }: { label: string; error?: string; required?: boolean; children: React.ReactNode }) {
-  const id = typeof children === "object" && children && "props" in children ? (children.props as { id?: string }).id : undefined;
+// Defined at module level: a component declared inside the page would be a new component type on every
+// render, so React would unmount its input and lose focus and the typed value.
+type TextFieldProps = {
+  id: OnboardingField;
+  label: string;
+  value: string;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  error?: string;
+  required?: boolean;
+  type?: string;
+  autoComplete?: string;
+  maxLength?: number;
+  hint?: string;
+  className?: string;
+};
+
+function TextField({ id, label, value, onChange, error, required, type = "text", autoComplete, maxLength, hint, className }: TextFieldProps) {
+  const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(" ") || undefined;
   return (
-    <div>
+    <div className={className}>
       <label htmlFor={id} className="block text-sm font-semibold text-slate-700">
         {label}
-        {required && <span className="text-red-500 font-bold"> *</span>}
+        {required && <span aria-hidden="true" className="text-red-500 font-bold"> *</span>}
       </label>
-      {children}
+      <input
+        id={id}
+        name={id}
+        type={type}
+        value={value}
+        onChange={onChange}
+        autoComplete={autoComplete}
+        maxLength={maxLength}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={inputClass}
+      />
+      {hint && <p id={`${id}-hint`} className="mt-1 text-xs text-slate-500">{hint}</p>}
       {error && <p id={`${id}-error`} className="mt-1 text-sm text-red-600" role="alert">{error}</p>}
     </div>
   );
 }
 
-function SubmitButton({ children }: { children: React.ReactNode }) {
+function StepHeading({ number, title, subtitle }: { number: OnboardingFormStep; title: string; subtitle?: string }) {
+  return (
+    <div className="text-center">
+      <p className="text-sm font-bold uppercase tracking-widest" style={{ color: "var(--brand-600)" }}>Step {number} of 3</p>
+      <h2 className="mt-2 text-3xl font-light text-slate-800">{title}</h2>
+      {subtitle && <p className="mt-2 text-sm text-slate-600">{subtitle}</p>}
+    </div>
+  );
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-lg px-5 py-3 text-sm font-bold text-slate-600 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-[var(--brand-500)]"
+    >
+      Back
+    </button>
+  );
+}
+
+function SubmitButton({ children }: { children: ReactNode }) {
   return (
     <button
       type="submit"

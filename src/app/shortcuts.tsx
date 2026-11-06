@@ -1,26 +1,35 @@
 "use client";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { resolveShortcut } from "@/lib/shortcuts";
 
+// Single-key shortcuts on signed-in pages: "/" focuses invoice search, "n" opens a new invoice.
+// The rules for when they fire live in src/lib/shortcuts.ts. There is no command palette yet, so
+// Ctrl/Cmd+K is left to the browser.
 export default function Shortcuts() {
   const router = useRouter();
+  const pathname = usePathname();
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        alert("Command palette coming soon");
+    const handler = (event: KeyboardEvent) => {
+      const action = resolveShortcut(event, pathname);
+      if (!action) return;
+
+      if (action.kind === "focus-search") {
+        const search = document.querySelector<HTMLInputElement>('input[aria-label="Search invoices"]');
+        // No search box on this page: leave "/" to the browser (for example quick find).
+        if (!search) return;
+        event.preventDefault();
+        search.focus();
+        return;
       }
-      if (e.key === "/" && !(e.target instanceof HTMLInputElement)) {
-        e.preventDefault();
-        const input = document.querySelector('input[aria-label="Search invoices"]') as HTMLInputElement | null;
-        input?.focus();
-      }
-      if (e.key.toLowerCase() === "n" && !(e.target instanceof HTMLInputElement)) {
-        router.push("/invoices/new");
-      }
+
+      event.preventDefault();
+      router.push(action.href);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [router]);
+  }, [router, pathname]);
+
   return null;
 }
