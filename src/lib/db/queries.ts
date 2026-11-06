@@ -17,6 +17,7 @@ import { toMinorUnits } from "../money";
 
 export const usersQ = {
   findByEmail: (email: string) => db.select().from(users).where(eq(users.email, email)).limit(1),
+  findById: (id: string) => db.select().from(users).where(eq(users.id, id)).limit(1),
   createWithBusiness: (userData: typeof users.$inferInsert, businessData: Omit<typeof businesses.$inferInsert, "userId">) =>
     db.transaction(async (tx) => {
       const [user] = await tx.insert(users).values(userData).returning();

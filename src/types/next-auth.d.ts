@@ -21,5 +21,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     id?: string;
     businessId?: string;
+    /** Server-side session id (auth_sessions.id). Never copied into the client-visible session. */
+    sid?: string;
   }
 }

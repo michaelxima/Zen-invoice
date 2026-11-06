@@ -35,14 +35,15 @@ test.describe("a session cookie the server did not issue grants nothing", () => 
       401,
     ],
     [
-      "signed for a user and business that do not exist",
+      // Correctly signed, but no server-side session backs it: since step 1.2 that is rejected outright.
+      "signed correctly but not backed by a server-side session",
       async () =>
         encode({
           token: { sub: randomUUID(), id: randomUUID(), businessId: randomUUID() },
           secret: E2E_NEXTAUTH_SECRET,
           maxAge: 3600,
         }),
-      403,
+      401,
     ],
   ];
 

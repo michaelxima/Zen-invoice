@@ -5,10 +5,10 @@ import Link from "next/link";
 import { ArrowRight, Lock, Mail } from "lucide-react";
 import { signIn } from "next-auth/react";
 
-type LoginFormProps = { callbackUrl: string; googleConfigured: boolean };
+type LoginFormProps = { callbackUrl: string; googleConfigured: boolean; initialError?: string | null };
 
-export default function LoginForm({ callbackUrl, googleConfigured }: LoginFormProps) {
-  const [error, setError] = useState<string | null>(null);
+export default function LoginForm({ callbackUrl, googleConfigured, initialError = null }: LoginFormProps) {
+  const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
 
   async function handleCredentials(event: FormEvent<HTMLFormElement>) {
@@ -80,7 +80,7 @@ export default function LoginForm({ callbackUrl, googleConfigured }: LoginFormPr
           </svg>
           <span>Continue with Google</span>
         </button>
-        {!googleConfigured && <p id="google-unavailable" role="status" className="mt-3 text-center text-xs text-amber-300">Google sign-in is unavailable because it has not been configured by the server administrator.</p>}
+        {!googleConfigured && <p id="google-unavailable" role="status" className="mt-3 text-center text-xs text-amber-300">Google sign-in is not available yet. Sign in with your email and password.</p>}
         {error && <p role="alert" className="mt-3 text-center text-xs text-red-300">{error}</p>}
         <p className="text-center text-xs text-slate-500 mt-6">Don&apos;t have an account?{" "}<Link href="/onboarding" className="text-indigo-400 font-semibold hover:underline">Register here</Link></p>
       </div>
