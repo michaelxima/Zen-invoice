@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import * as dotenv from "dotenv";
-import { isLocalHost, parseDisposableDatabaseUrl } from "./disposable";
+import { parseDisposableDatabaseUrl } from "./disposable";
+import { databaseTlsOptions } from "./connection-options";
 
 // Values already present in the environment take precedence over this file.
 dotenv.config({ path: ".env.test.local", quiet: true });
@@ -17,7 +18,7 @@ async function main() {
   // Connect to the server's maintenance database, because the target may not exist yet.
   const admin = new URL(target.url);
   admin.pathname = "/postgres";
-  const sql = postgres(admin.toString(), { max: 1, ...(isLocalHost(admin.hostname) ? {} : { ssl: "require" as const }) });
+  const sql = postgres(admin.toString(), { max: 1, ssl: databaseTlsOptions(admin.toString()) });
   try {
     // The name already matched ^[a-z0-9_]+_test$, and sql(name) quotes it as an identifier.
     const name = sql(target.database);

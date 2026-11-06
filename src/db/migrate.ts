@@ -2,7 +2,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import * as dotenv from "dotenv";
-import { isLocalHost, parseDisposableDatabaseUrl } from "./disposable";
+import { parseDisposableDatabaseUrl } from "./disposable";
+import { databaseTlsOptions, describeDatabaseTls } from "./connection-options";
 
 // Values already present in the environment take precedence over these files.
 dotenv.config({ path: ".env.test.local", quiet: true });
@@ -32,11 +33,11 @@ function resolveTarget(): { connectionString: string; label: string } {
 
 async function main() {
   const { connectionString, label } = resolveTarget();
-  const isLocalDatabase = isLocalHost(new URL(connectionString).hostname);
-  // TLS verification for remote servers is tracked separately (remediation step 1.5).
-  const sql = postgres(connectionString, { max: 1, ...(isLocalDatabase ? {} : { ssl: "require" as const }) });
+  // Same TLS policy as the app: remote databases are verified (certificate and hostname). See connection-options.ts.
+  const tls = databaseTlsOptions(connectionString);
+  const sql = postgres(connectionString, { max: 1, ssl: tls });
   try {
-    console.log(`Applying reviewed database migrations to ${label}...`);
+    console.log(`Applying reviewed database migrations to ${label} over ${describeDatabaseTls(tls)}...`);
     await migrate(drizzle(sql), { migrationsFolder: "./drizzle" });
     console.log("Migrations applied successfully!");
   } finally {

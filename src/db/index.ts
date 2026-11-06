@@ -4,6 +4,7 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "./schema";
 import { parseDisposableDatabaseUrl } from "./disposable";
+import { databaseTlsOptions } from "./connection-options";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -17,8 +18,6 @@ if (process.env.E2E_DISPOSABLE_DB === "1") {
   });
 }
 
-const parsedDatabaseUrl = new URL(connectionString);
-const isLocalDatabase = ["localhost", "127.0.0.1", "::1"].includes(parsedDatabaseUrl.hostname);
 const configuredPoolSize = Number(process.env.POSTGRES_POOL_MAX || (process.env.NODE_ENV === "production" ? "1" : "5"));
 if (!Number.isInteger(configuredPoolSize) || configuredPoolSize < 1 || configuredPoolSize > 20) {
   throw new Error("POSTGRES_POOL_MAX must be an integer between 1 and 20");
@@ -26,6 +25,7 @@ if (!Number.isInteger(configuredPoolSize) || configuredPoolSize < 1 || configure
 
 const sql = postgres(connectionString, {
   max: configuredPoolSize,
-  ...(isLocalDatabase ? {} : { ssl: "require" as const }),
+  // Remote databases: TLS with certificate and hostname verification. See src/db/connection-options.ts.
+  ssl: databaseTlsOptions(connectionString),
 });
 export const db = drizzle(sql, { schema });

@@ -22,7 +22,7 @@ npm ci
 cp .env.example .env.local
 ```
 
-Set `DATABASE_URL`, `NEXTAUTH_URL`, and a strong `NEXTAUTH_SECRET`. Google OAuth is optional; when enabled, register the redirect URL for the exact local origin:
+Set `DATABASE_URL`, `NEXTAUTH_URL`, and a strong `NEXTAUTH_SECRET`. A remote database is always reached over TLS that checks the server certificate and hostname; if your provider's certificate is not signed by a public CA, set `DATABASE_SSL_ROOT_CERT` to the provider's CA file. Only a database on this machine (localhost) may use plain TCP. Google OAuth is optional; when enabled, register the redirect URL for the exact local origin:
 
 ```text
 http://localhost:3005/api/auth/callback/google
