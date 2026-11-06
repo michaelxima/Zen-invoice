@@ -153,6 +153,8 @@ test.describe("global shortcuts never eat typed text", () => {
   test("n and / typed into a textarea and an input stay in the field", async ({ page }) => {
     await page.goto("/settings");
     const address = page.getByLabel(/Business address/i);
+    // Wait until the saved settings have loaded, so the edit below is not racing the page's own load.
+    await expect(address).toHaveValue("123 Market Street, San Francisco, 94105, United States");
     await address.fill("");
     await address.pressSequentially("1 n/ Main St");
     await expect(address).toHaveValue("1 n/ Main St");

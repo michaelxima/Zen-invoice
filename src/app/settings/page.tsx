@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { getBusinessSettings, updateBusinessSettings } from "@/lib/actions/settings";
@@ -18,6 +19,7 @@ type Settings = {
 };
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -27,12 +29,27 @@ export default function SettingsPage() {
   const [sessionError, setSessionError] = useState("");
 
   useEffect(() => {
-    getBusinessSettings().then(setSettings).catch(() => setError("Could not load business settings.")).finally(() => setLoading(false));
+    // Ignore a load that finishes after this effect was cleaned up. In development React runs effects twice,
+    // and without this guard the second, late response overwrote whatever the user had already typed.
+    let cancelled = false;
+    getBusinessSettings()
+      .then((loaded) => {
+        if (!cancelled) setSettings(loaded);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Could not load business settings.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     const query = new URLSearchParams(window.location.search);
     const stripeResult = query.get("stripe");
     if (stripeResult === "connected") setMessage("Stripe account connected.");
     else if (stripeResult === "cancelled") setMessage("Stripe connection was cancelled.");
     else if (stripeResult) setError("Stripe connection could not be completed. Check the Connect configuration and try again.");
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const updateField = (field: keyof Settings, value: string) => {
@@ -73,9 +90,10 @@ export default function SettingsPage() {
         setSigningOutEverywhere(false);
         return;
       }
-      // This browser's session is already revoked; clear its cookie too, then leave.
+      // This browser's session is already revoked; clear its cookie too, then leave and drop cached pages.
       await signOut({ redirect: false }).catch(() => undefined);
-      window.location.assign("/login");
+      router.replace("/login");
+      router.refresh();
     } catch {
       setSessionError("Signing out of all devices failed. Your sessions were not changed. Try again.");
       setSigningOutEverywhere(false);

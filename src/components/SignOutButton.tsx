@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { LogOut } from "lucide-react";
 
 // Ends the session through NextAuth: the server revokes this browser's session and clears the cookie.
-// A full page load to /login afterwards drops any signed-in state still held in memory.
+// Then it goes to /login and refreshes, so no signed-in page stays in the client router cache.
 export function SignOutButton() {
+  const router = useRouter();
   const [state, setState] = useState<"idle" | "pending" | "error">("idle");
 
   async function handleSignOut() {
@@ -14,7 +16,8 @@ export function SignOutButton() {
     setState("pending");
     try {
       await signOut({ redirect: false });
-      window.location.assign("/login");
+      router.replace("/login");
+      router.refresh();
     } catch {
       setState("error");
     }
