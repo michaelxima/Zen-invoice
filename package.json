@@ -14,13 +14,14 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
     "test:e2e": "playwright test",
     "test:unit": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "db:migrate:test": "tsx src/db/migrate.ts --test",
+    "db:test:create": "tsx src/db/create-test-database.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
