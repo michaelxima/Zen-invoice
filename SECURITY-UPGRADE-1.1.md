@@ -71,9 +71,9 @@ Any remaining advisory gets a row below with an owner, applicability and remedia
 
 Process note: the upgrade was first applied before the baseline commit existed. The working tree's `package.json` and lockfile were restored byte-for-byte from the pre-change backup so the baseline commit is honest; the upgraded files are kept in `.work/upgrade-1.1/` and are re-applied on the `fix/1.1-dependency-security` branch.
 
-**2026-11-06 — on branch `fix/1.1-dependency-security` (from baseline `09b3bee`):**
+**2026-11-06 — on branch `fix/1.1-dependency-security` (from baseline `d9f324c`):**
 - `npm update source-map-js` → 1.2.2 everywhere (single copy). GHSA-68fv-2mgg-jv7q resolved.
-- Committed as `1b38a3f`. After a fresh `npm ci`: **`npm audit --omit=dev` → found 0 vulnerabilities.**
+- Committed as `97666f2`. After a fresh `npm ci`: **`npm audit --omit=dev` → found 0 vulnerabilities.**
 - Fresh `npm ci`: OK. Remaining full-tree audit: 14 (12 moderate, 2 high), all dev-only — to be triaged from `after-all.json`.
 - `npm run build` with `--webpack` on 16.4.5: **compiles**; fails only at the type-check step because of the missing `vitest` dev dependency (pre-existing, see MASTER-PLAN §7). Not caused by this upgrade.
 - `npm run lint`: 0 errors, 3 pre-existing `no-img-element` warnings (MASTER-PLAN §7).
