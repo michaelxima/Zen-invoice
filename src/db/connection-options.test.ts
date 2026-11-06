@@ -12,29 +12,29 @@ const CA = fixture("test-ca.crt");
 
 describe("databaseTlsOptions", () => {
   it.each(["localhost", "127.0.0.1", "[::1]"])("uses plain TCP for a database on this machine (%s)", (host) => {
-    expect(databaseTlsOptions(`[REDACTED_CONN_STRING]://${host}:5432/app`, {})).toBe(false);
+    expect(databaseTlsOptions(`postgresql://${host}:5432/app`, {})).toBe(false);
   });
 
   it("verifies a local database when sslmode=verify-full is asked for", () => {
-    expect(databaseTlsOptions("[REDACTED_CONN_STRING]://localhost/app?sslmode=verify-full", {})).toMatchObject({ rejectUnauthorized: true });
+    expect(databaseTlsOptions("postgresql://localhost/app?sslmode=verify-full", {})).toMatchObject({ rejectUnauthorized: true });
   });
 
   it("always verifies certificate and hostname for a remote database", () => {
-    expect(databaseTlsOptions("[REDACTED_CONN_STRING]://db.example.com/app", {})).toEqual({
+    expect(databaseTlsOptions("postgresql://db.example.com/app", {})).toEqual({
       rejectUnauthorized: true,
       servername: "db.example.com",
     });
-    expect(databaseTlsOptions("[REDACTED_CONN_STRING]://db.example.com/app?sslmode=verify-full&sslrootcert=system", {})).toMatchObject({
+    expect(databaseTlsOptions("postgresql://db.example.com/app?sslmode=verify-full&sslrootcert=system", {})).toMatchObject({
       rejectUnauthorized: true,
     });
   });
 
   it("checks an IP address against the certificate's IP entries instead of sending it as SNI", () => {
-    expect(databaseTlsOptions("[REDACTED_CONN_STRING]://10.1.2.3/app", {})).toEqual({ rejectUnauthorized: true, host: "10.1.2.3" });
+    expect(databaseTlsOptions("postgresql://10.1.2.3/app", {})).toEqual({ rejectUnauthorized: true, host: "10.1.2.3" });
   });
 
   it("uses the CA file from DATABASE_SSL_ROOT_CERT", () => {
-    const options = databaseTlsOptions("[REDACTED_CONN_STRING]://db.example.com/app", { DATABASE_SSL_ROOT_CERT: CA });
+    const options = databaseTlsOptions("postgresql://db.example.com/app", { DATABASE_SSL_ROOT_CERT: CA });
     expect(options && options.ca).toContain("-----BEGIN CERTIFICATE-----");
     expect(describeDatabaseTls(options)).toMatch(/DATABASE_SSL_ROOT_CERT/);
   });
@@ -42,17 +42,17 @@ describe("databaseTlsOptions", () => {
   it.each(["disable", "allow", "prefer", "require", "no-verify", "verify-ca", "REQUIRE"])(
     "refuses sslmode=%s for a remote database instead of silently weakening or ignoring it",
     (mode) => {
-      expect(() => databaseTlsOptions(`[REDACTED_CONN_STRING]://db.example.com/app?sslmode=${mode}`, {})).toThrow(DatabaseTlsConfigError);
+      expect(() => databaseTlsOptions(`postgresql://db.example.com/app?sslmode=${mode}`, {})).toThrow(DatabaseTlsConfigError);
     },
   );
 
   it("refuses a CA path in the URL (use DATABASE_SSL_ROOT_CERT)", () => {
-    expect(() => databaseTlsOptions("[REDACTED_CONN_STRING]://db.example.com/app?sslrootcert=/tmp/ca.pem", {})).toThrow(/DATABASE_SSL_ROOT_CERT/);
+    expect(() => databaseTlsOptions("postgresql://db.example.com/app?sslrootcert=/tmp/ca.pem", {})).toThrow(/DATABASE_SSL_ROOT_CERT/);
   });
 
   it("refuses an unreadable or non-certificate CA file", () => {
-    expect(() => databaseTlsOptions("[REDACTED_CONN_STRING]://db.example.com/app", { DATABASE_SSL_ROOT_CERT: fixture("missing.crt") })).toThrow(/cannot be read/);
-    expect(() => databaseTlsOptions("[REDACTED_CONN_STRING]://db.example.com/app", { DATABASE_SSL_ROOT_CERT: fixture("server.key") })).toThrow(/PEM certificate/);
+    expect(() => databaseTlsOptions("postgresql://db.example.com/app", { DATABASE_SSL_ROOT_CERT: fixture("missing.crt") })).toThrow(/cannot be read/);
+    expect(() => databaseTlsOptions("postgresql://db.example.com/app", { DATABASE_SSL_ROOT_CERT: fixture("server.key") })).toThrow(/PEM certificate/);
   });
 
   it("refuses an invalid URL without echoing it", () => {
@@ -113,7 +113,7 @@ async function startFakePostgres(certName: string): Promise<FakeServer> {
 /** Connects exactly the way src/db/index.ts and src/db/migrate.ts do: postgres(url, { ssl: databaseTlsOptions(url) }). */
 async function connectWithAppPolicy(port: number): Promise<Error & { code?: string }> {
   // 127.0.0.2 is a loopback address the policy treats as remote (only localhost/127.0.0.1/::1 are exempt).
-  const url = `[REDACTED_CONN_STRING]://127.0.0.2:${port}/app`;
+  const url = `postgresql://127.0.0.2:${port}/app`;
   const sql = postgres(url, {
     max: 1,
     connect_timeout: 5,

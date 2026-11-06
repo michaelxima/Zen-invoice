@@ -20,7 +20,7 @@ export default defineConfig({
     host: url.hostname.replace(/^\[|\]$/g, ""),
     port: url.port ? Number(url.port) : 5432,
     user: decodeURIComponent(url.username),
-    password=[REDACTED_PASSWORD]
+    password: decodeURIComponent(url.password),
     database: decodeURIComponent(url.pathname.replace(/^\/+/, "")),
     ssl,
   },
