@@ -417,4 +417,5 @@ Roughly **12–14 weeks** to a genuinely world-class v1. Anything faster skips v
 
 ## 7. Discovered Issues (agents append here, never fix out of scope)
 
-- _(empty)_
+- **2026-11-06 — WP-0.3 incomplete:** `vitest` (and `@vitest/coverage-v8` for `test:coverage`) were never added to `devDependencies`. `npm run test:unit` fails with "vitest is not recognized" and `tsc` fails on `vitest.config.ts` and the test file, so `typecheck`, `build` and CI fail on the baseline commit too. Fix: add both as dev dependencies (same version), separate commit.
+- **2026-11-06 — lint warnings (pre-existing):** `@next/next/no-img-element` at `src/app/portal/[token]/page.tsx:128,190` and `src/components/Sidebar.tsx:80` (brand logo). Fold into WP-0.4 (brand rename) or WP-5.1; the Definition of Done requires 0 warnings.
